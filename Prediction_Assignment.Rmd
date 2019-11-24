@@ -1,0 +1,90 @@
+---
+title: "Prediction Assignment"
+author: "Chenyu Zhang"
+date: '2019-11-12'
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(rpart)
+```
+
+## Introduction
+
+The goal of your project is to predict the manner in which participants did the barbell lifts exercise. This report will illustrate how I built the model, how I used cross validation, what the sample error is, and my rationals of my decision. 
+
+There is no Classe variable in the testing dataset so I split the training data set into a subTrain and subTesting sets for the purpose of cross validation.
+
+## Read Data
+```{r data}
+training = read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"), na.strings=c("NA","#DIV/0!", ""))
+testing = read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"), na.strings=c("NA","#DIV/0!", ""))
+
+# Remove the first column because it's the row number when reading the data from url to r
+training = training[, -1]
+testing = testing[, -1]
+summary = summary(training)
+
+# remove columns with all NAs
+training = training[, colSums(is.na(training)) == 0]
+testing = testing[, colSums(is.na(testing)) == 0]
+
+# Split training dataset into 2 sets for cross validation
+set.seed(1234)
+inTrain = createDataPartition(training$classe, p = 3/4)[[1]]
+subTrain = training[inTrain, ]
+subTesting = training[-inTrain,]
+```
+
+## Build Prediction Model
+
+I choose random forest model and decision tree model since the factor variable (i.e. classe) cannot be fittedd into regression models.
+
+```{r models}
+# Random Forest Model
+# mod_rf = train(classe ~., method = "rf", data = subTrain)
+mod_rf = randomForest::randomForest(classe ~.,data = subTrain)
+pred_rf = predict(mod_rf, newdata = subTesting)
+
+
+# Decision Tree
+mod_dt = rpart(classe ~., method = "class", data = subTrain)
+pred_dt = predict(mod_dt, type = "class", newdata = subTesting)
+
+```
+
+## Cross Validation
+
+```{r cross_validation}
+# Random Forest Model
+# confusionMatrix(pred_rf, subTesting$classe)
+accuracy_rf = confusionMatrix(pred_rf, subTesting$classe)$overall[[1]]
+error_rate_rf = 1- accuracy_rf
+
+
+# decision tree
+# confusionMatrix(pred_dt, subTesting$classe)
+accuracy_dt = confusionMatrix(pred_dt, subTesting$classe)$overall[[1]]
+error_rate_dt = 1-accuracy_dt
+```
+I applied the training models into the subTesting data set and use the ConfusionMatrix function to identify accuracy of each model. The accuracy of random forest method is `r accuracy_rf` and the one for decision tree is `r accuracy_dt` so the random forest predicts better than the decision tree. The expected out of sample error is 1 - accurary so, in this case, the error rate of random forest is `r error_rate_rf`.
+
+## Prediction Result
+```{r predction, warning=F}
+names(testing) = names(training)
+result = data.frame()
+for (i in 1:nrow(testing)){
+        temp = rbind(subTrain[1, ], testing[i,])
+        temp = temp[-1,]
+        pred_row = predict(mod_rf, newdata = temp)
+        pred_row_id = data.frame(problem_id = i, prediction = pred_row)
+        result = rbind(result, pred_row_id)
+}
+
+result
+
+```
